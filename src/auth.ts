@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { betterAuth } from "better-auth";
-import { openAPI } from "better-auth/plugins";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { redisStorage } from "@better-auth/redis-storage";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { openAPI } from "better-auth/plugins";
 import { typeid } from "typeid-js";
 import { db } from "~/db";
 import { redis } from "~/lib/redis";
@@ -22,6 +22,10 @@ export const auth = betterAuth({
 	basePath: "/api",
 	secret: process.env.BETTER_AUTH_SECRET,
 	appUrl: process.env.BETTER_AUTH_URL,
+	emailAndPassword: {
+		enabled: true,
+		requireEmailVerification: false,
+	},
 	secondaryStorage: redisStorage({
 		client: redis,
 		keyPrefix: "better-auth:",
@@ -44,7 +48,11 @@ export const auth = betterAuth({
 	},
 });
 
-let openApiSchema: ReturnType<typeof auth.api.generateOpenAPISchema> | undefined;
+let openApiSchema:
+	| ReturnType<typeof auth.api.generateOpenAPISchema>
+	| undefined;
+
+type AuthOpenAPIPathItem = Record<string, { tags?: string[] }>;
 
 const getOpenApiSchema = async () => {
 	openApiSchema ??= auth.api.generateOpenAPISchema();
@@ -61,8 +69,9 @@ export const authOpenAPI = {
 				const key = `${prefix}${path}`;
 				prefixedPaths[key] = paths[path];
 
-				for (const method of Object.keys(paths[path])) {
-					const operation = (prefixedPaths[key] as any)[method];
+				const pathItem = prefixedPaths[key] as AuthOpenAPIPathItem;
+				for (const method of Object.keys(pathItem)) {
+					const operation = pathItem[method];
 					operation.tags = ["Auth"];
 				}
 			}

@@ -1,0 +1,304 @@
+// Lunch settlement backend. Import at https://dbdiagram.io — PostgreSQL. Ledger is source of truth; balances are SUM(ledger_entries.amount_minor); settlement uses offsetting entries.
+
+Project lunch_settlement_backend {
+  database_type: 'PostgreSQL'
+}
+
+Enum group_member_role {
+  owner
+  admin
+  member
+}
+
+Enum group_member_status {
+  active
+  invited
+  removed
+}
+
+Enum split_type {
+  exact
+  equal
+  percentage
+  shares
+}
+
+Enum expense_status {
+  posted
+  voided
+}
+
+Enum ledger_transaction_type {
+  expense
+  expense_reversal
+  settlement
+  settlement_reversal
+}
+
+Enum ledger_entry_type {
+  expense
+  expense_reversal
+  settlement
+  settlement_reversal
+}
+
+Enum settlement_status {
+  posted
+  voided
+}
+
+Enum settlement_transfer_status {
+  suggested
+  confirmed
+}
+
+Table user {
+  id text [pk]
+  name text [not null]
+  email text [not null, unique]
+  email_verified boolean [not null, default: false]
+  image text
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  Note: "Better Auth user table. Domain records reference user.id."
+}
+
+Table session {
+  id text [pk]
+  expires_at timestamp [not null]
+  token text [not null, unique]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+  ip_address text
+  user_agent text
+  user_id text [not null]
+
+  indexes {
+    user_id [name: "session_userId_idx"]
+  }
+}
+
+Table account {
+  id text [pk]
+  account_id text [not null]
+  provider_id text [not null]
+  user_id text [not null]
+  access_token text
+  refresh_token text
+  id_token text
+  access_token_expires_at timestamp
+  refresh_token_expires_at timestamp
+  scope text
+  password text
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id [name: "account_userId_idx"]
+  }
+}
+
+Table verification {
+  id text [pk]
+  identifier text [not null]
+  value text [not null]
+  expires_at timestamp [not null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    identifier [name: "verification_identifier_idx"]
+  }
+}
+
+Table groups {
+  id text [pk]
+  name text [not null]
+  currency text [not null, default: "MNT"]
+  created_by_user_id text [not null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+  archived_at timestamp
+
+  indexes {
+    created_by_user_id [name: "groups_created_by_user_id_idx"]
+    archived_at [name: "groups_archived_at_idx"]
+  }
+}
+
+Table group_members {
+  group_id text [not null]
+  user_id text [not null]
+  role group_member_role [not null, default: "member"]
+  status group_member_status [not null, default: "active"]
+  joined_at timestamp
+  removed_at timestamp
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (group_id, user_id) [unique, name: "group_members_group_id_user_id_unique"]
+    user_id [name: "group_members_user_id_idx"]
+    (group_id, status) [name: "group_members_group_id_status_idx"]
+  }
+
+  Note: "Membership is group-scoped. Same user can have different roles in different groups."
+}
+
+Table expenses {
+  id text [pk]
+  group_id text [not null]
+  payer_user_id text [not null]
+  created_by_user_id text [not null]
+  description text
+  total_amount_minor bigint [not null]
+  currency text [not null, default: "MNT"]
+  split_type split_type [not null, default: "exact"]
+  status expense_status [not null, default: "posted"]
+  occurred_on date [not null]
+  created_at timestamp [not null, default: `now()`]
+  voided_at timestamp
+  voided_by_user_id text
+
+  indexes {
+    (group_id, occurred_on) [name: "expenses_group_id_occurred_on_idx"]
+    (group_id, status) [name: "expenses_group_id_status_idx"]
+    payer_user_id [name: "expenses_payer_user_id_idx"]
+  }
+}
+
+Table expense_participants {
+  expense_id text [not null]
+  user_id text [not null]
+  amount_minor bigint
+  share_count integer
+  percentage numeric
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (expense_id, user_id) [unique, name: "expense_participants_expense_id_user_id_unique"]
+    user_id [name: "expense_participants_user_id_idx"]
+  }
+
+  Note: "MVP exact split uses amount_minor. share_count and percentage are for future split types."
+}
+
+Table ledger_transactions {
+  id text [pk]
+  group_id text [not null]
+  type ledger_transaction_type [not null]
+  source_id text [not null]
+  reverses_transaction_id text
+  created_by_user_id text [not null]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (group_id, created_at) [name: "ledger_transactions_group_id_created_at_idx"]
+    source_id [name: "ledger_transactions_source_id_idx"]
+    reverses_transaction_id [name: "ledger_transactions_reverses_transaction_id_idx"]
+  }
+
+  Note: "Groups ledger entries under one accounting event."
+}
+
+Table ledger_entries {
+  id text [pk]
+  transaction_id text [not null]
+  group_id text [not null]
+  user_id text [not null]
+  amount_minor bigint [not null]
+  currency text [not null, default: "MNT"]
+  entry_type ledger_entry_type [not null]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (group_id, user_id) [name: "ledger_entries_group_id_user_id_idx"]
+    transaction_id [name: "ledger_entries_transaction_id_idx"]
+    (group_id, created_at) [name: "ledger_entries_group_id_created_at_idx"]
+  }
+
+  Note: "Source of truth for balances. DB: amount_minor <> 0. App: SUM per transaction = 0."
+}
+
+Table settlement_batches {
+  id text [pk]
+  group_id text [not null]
+  created_by_user_id text [not null]
+  status settlement_status [not null, default: "posted"]
+  settled_from timestamp
+  settled_to timestamp [not null]
+  note text
+  created_at timestamp [not null, default: `now()`]
+  voided_at timestamp
+  voided_by_user_id text
+
+  indexes {
+    (group_id, created_at) [name: "settlement_batches_group_id_created_at_idx"]
+    (group_id, status) [name: "settlement_batches_group_id_status_idx"]
+  }
+}
+
+Table settlement_transfers {
+  id text [pk]
+  settlement_batch_id text [not null]
+  from_user_id text [not null]
+  to_user_id text [not null]
+  amount_minor bigint [not null]
+  currency text [not null, default: "MNT"]
+  status settlement_transfer_status [not null, default: "suggested"]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    settlement_batch_id [name: "settlement_transfers_batch_id_idx"]
+    from_user_id [name: "settlement_transfers_from_user_id_idx"]
+    to_user_id [name: "settlement_transfers_to_user_id_idx"]
+  }
+
+  Note: "Stored transfer plan from settlement time. Do not recalculate historical settlements."
+}
+
+// Derived view: balance_minor = SUM(ledger_entries.amount_minor) by group, user, currency
+Table group_member_balances_view {
+  group_id text
+  user_id text
+  currency text
+  balance_minor bigint
+
+  Note: "PostgreSQL VIEW group_member_balances_view (not a physical table)."
+}
+
+Ref: session.user_id > user.id [delete: cascade]
+Ref: account.user_id > user.id [delete: cascade]
+
+Ref: groups.created_by_user_id > user.id [delete: restrict]
+
+Ref: group_members.group_id > groups.id [delete: cascade]
+Ref: group_members.user_id > user.id [delete: restrict]
+
+Ref: expenses.group_id > groups.id [delete: cascade]
+Ref: expenses.payer_user_id > user.id [delete: restrict]
+Ref: expenses.created_by_user_id > user.id [delete: restrict]
+Ref: expenses.voided_by_user_id > user.id [delete: restrict]
+
+Ref: expense_participants.expense_id > expenses.id [delete: cascade]
+Ref: expense_participants.user_id > user.id [delete: restrict]
+
+Ref: ledger_transactions.group_id > groups.id [delete: cascade]
+Ref: ledger_transactions.created_by_user_id > user.id [delete: restrict]
+Ref: ledger_transactions.reverses_transaction_id > ledger_transactions.id
+
+Ref: ledger_entries.transaction_id > ledger_transactions.id [delete: cascade]
+Ref: ledger_entries.group_id > groups.id [delete: cascade]
+Ref: ledger_entries.user_id > user.id [delete: restrict]
+
+Ref: settlement_batches.group_id > groups.id [delete: cascade]
+Ref: settlement_batches.created_by_user_id > user.id [delete: restrict]
+Ref: settlement_batches.voided_by_user_id > user.id [delete: restrict]
+
+Ref: settlement_transfers.settlement_batch_id > settlement_batches.id [delete: cascade]
+Ref: settlement_transfers.from_user_id > user.id [delete: restrict]
+Ref: settlement_transfers.to_user_id > user.id [delete: restrict]
+
+Ref: group_member_balances_view.group_id > groups.id
+Ref: group_member_balances_view.user_id > user.id
