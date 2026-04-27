@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysia/openapi";
-import { auth } from "~/auth";
+import { auth, authOpenAPI } from "~/auth";
 
 // Auth guard macro plugin — resolves user/session from Better Auth
 const authGuard = new Elysia({ name: "auth-guard" }).macro({
@@ -23,8 +23,26 @@ const authGuard = new Elysia({ name: "auth-guard" }).macro({
   },
 });
 
+const authComponents = await authOpenAPI.components;
+const authPaths = await authOpenAPI.getPaths();
+
 const app = new Elysia()
-  .use(openapi())
+  .use(
+    openapi({
+      provider: "scalar",
+      path: "/openapi",
+      specPath: "/openapi/json",
+      documentation: {
+        info: {
+          title: "Ubcab Task API",
+          version: "1.0.0",
+          description: "Shared lunch expense tracking API with Better Auth authentication, groups, expenses, ledger balances, and settlements.",
+        },
+        components: authComponents,
+        paths: authPaths,
+      },
+    }),
+  )
   .use(
     cors({
       origin: "http://localhost:3001",

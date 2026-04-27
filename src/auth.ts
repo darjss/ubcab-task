@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { betterAuth } from "better-auth";
+import { openAPI } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { redisStorage } from "@better-auth/redis-storage";
 import { typeid } from "typeid-js";
@@ -25,6 +26,12 @@ export const auth = betterAuth({
 		client: redis,
 		keyPrefix: "better-auth:",
 	}),
+	plugins: [
+		openAPI({
+			path: "/reference",
+			theme: "default",
+		}),
+	],
 	advanced: {
 		database: {
 			generateId: (options) => {
@@ -36,3 +43,30 @@ export const auth = betterAuth({
 		},
 	},
 });
+
+let openApiSchema: ReturnType<typeof auth.api.generateOpenAPISchema> | undefined;
+
+const getOpenApiSchema = async () => {
+	openApiSchema ??= auth.api.generateOpenAPISchema();
+	return openApiSchema;
+};
+
+export const authOpenAPI = {
+	components: getOpenApiSchema().then(({ components }) => components),
+	getPaths: (prefix = "/auth/api") =>
+		getOpenApiSchema().then(({ paths }) => {
+			const prefixedPaths: typeof paths = Object.create(null);
+
+			for (const path of Object.keys(paths)) {
+				const key = `${prefix}${path}`;
+				prefixedPaths[key] = paths[path];
+
+				for (const method of Object.keys(paths[path])) {
+					const operation = (prefixedPaths[key] as any)[method];
+					operation.tags = ["Auth"];
+				}
+			}
+
+			return prefixedPaths;
+		}),
+} as const;
