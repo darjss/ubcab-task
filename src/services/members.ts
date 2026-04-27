@@ -72,7 +72,7 @@ export const addGroupMember = (input: {
 			}
 
 			if (existing) {
-				const updated = await queries.members.updateRole(
+				const updated = await queries.members.restoreActive(
 					input.groupId,
 					input.userId,
 					input.role ?? "member",

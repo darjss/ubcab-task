@@ -1,32 +1,11 @@
 import { sql } from "drizzle-orm";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { db } from "~/db";
+import { BenchmarkResponseSchema } from "~/lib/schemas";
 import { redis } from "~/lib/redis";
 
 const elapsedMs = (start: number) =>
 	Math.round((performance.now() - start) * 1000) / 1000;
-
-const BenchmarkResponseSchema = t.Object({
-	data: t.Object({
-		redis: t.Object({
-			easyMs: t.Number({ description: "PING round-trip" }),
-			hardMs: t.Number({
-				description: "Pipeline: 40 SET + 40 GET on scratch keys",
-			}),
-			ping: t.String(),
-			hardPipelineCommands: t.Number(),
-		}),
-		postgres: t.Object({
-			easyMs: t.Number({ description: "SELECT 1" }),
-			hardMs: t.Number({
-				description:
-					"GROUP BY join: groups × ledger_entries, aggregate, ORDER BY, LIMIT",
-			}),
-			hardRowCount: t.Number(),
-		}),
-		generatedAt: t.String({ format: "date-time" }),
-	}),
-});
 
 export const benchmarkRoutes = new Elysia({ name: "benchmark-routes" }).get(
 	"/benchmark",

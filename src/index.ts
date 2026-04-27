@@ -1,8 +1,12 @@
 import { openapi } from "@elysia/openapi";
 import { cors } from "@elysiajs/cors";
 import { Elysia } from "elysia";
-import { auth, authOpenAPI } from "~/auth";
+import type { OpenAPIV3 } from "openapi-types";
+import { auth, authOpenAPI } from "~/lib/auth";
+import { domainOpenApiSchemas } from "~/lib/openapi-domain-schemas";
+import { HealthResponseSchema } from "~/lib/schemas";
 import { authGuard } from "~/plugins/auth-guard";
+import { requestLogger } from "~/plugins/request-logger";
 import { balanceRoutes } from "~/routes/balances";
 import { benchmarkRoutes } from "~/routes/benchmark";
 import { expenseRoutes } from "~/routes/expenses";
@@ -11,8 +15,16 @@ import { ledgerRoutes } from "~/routes/ledger";
 import { memberRoutes } from "~/routes/members";
 import { settlementRoutes } from "~/routes/settlements";
 
-const authComponents = await authOpenAPI.components;
+const authComponents =
+	(await authOpenAPI.components) as OpenAPIV3.ComponentsObject;
 const authPaths = await authOpenAPI.getPaths();
+const mergedComponents: OpenAPIV3.ComponentsObject = {
+	...authComponents,
+	schemas: {
+		...(authComponents.schemas ?? {}),
+		...domainOpenApiSchemas,
+	},
+};
 
 const app = new Elysia()
 	.use(
@@ -37,7 +49,7 @@ const app = new Elysia()
 						description: "Local development",
 					},
 				],
-				components: authComponents as never,
+				components: mergedComponents as never,
 				paths: authPaths as never,
 			},
 		}),
@@ -54,11 +66,18 @@ const app = new Elysia()
 			allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
 		}),
 	)
+	.use(requestLogger)
 	.mount("/auth", auth.handler)
 	.use(authGuard)
 	.group("/api", (app) =>
 		app
-			.get("/health", () => ({ status: "ok" }))
+			.get("/health", () => ({ status: "ok" as const }), {
+				response: { 200: HealthResponseSchema },
+				detail: {
+					tags: ["Health"],
+					summary: "Health check",
+				},
+			})
 			.use(benchmarkRoutes)
 			.get("/me", ({ user }) => user, {
 				auth: true,

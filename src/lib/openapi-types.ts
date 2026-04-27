@@ -1,4 +1,4 @@
-import type { authOpenAPI } from "~/auth";
+import type { authOpenAPI } from "~/lib/auth";
 
 type AwaitedValue<T> = T extends Promise<infer U> ? U : T;
 

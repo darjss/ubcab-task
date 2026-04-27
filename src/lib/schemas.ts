@@ -8,6 +8,11 @@ export const SignedAmountMinorSchema = t.Number({ multipleOf: 1 });
 export const IsoDateSchema = t.String({ format: "date" });
 export const IsoDateTimeSchema = t.String({ format: "date-time" });
 
+/** Public health check (no auth). */
+export const HealthResponseSchema = t.Object({
+	status: t.Literal("ok"),
+});
+
 export const ErrorResponseSchema = t.Object({
 	error: t.Object({
 		code: t.String(),
@@ -271,3 +276,25 @@ export const DomainErrorResponses = {
 	500: ErrorResponseSchema,
 	503: ErrorResponseSchema,
 };
+
+export const BenchmarkResponseSchema = t.Object({
+	data: t.Object({
+		redis: t.Object({
+			easyMs: t.Number({ description: "PING round-trip" }),
+			hardMs: t.Number({
+				description: "Pipeline: 40 SET + 40 GET on scratch keys",
+			}),
+			ping: t.String(),
+			hardPipelineCommands: t.Number(),
+		}),
+		postgres: t.Object({
+			easyMs: t.Number({ description: "SELECT 1" }),
+			hardMs: t.Number({
+				description:
+					"GROUP BY join: groups × ledger_entries, aggregate, ORDER BY, LIMIT",
+			}),
+			hardRowCount: t.Number(),
+		}),
+		generatedAt: t.String({ format: "date-time" }),
+	}),
+});

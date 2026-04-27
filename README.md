@@ -50,6 +50,15 @@ curl -sS "https://ubcab-task-production.up.railway.app/api/benchmark"
 curl -sS "https://ubcab-task-production.up.railway.app/openapi/json" | head -c 400
 ```
 
+Or run the bundled smoke script (health, benchmark, model count, root):
+
+```bash
+./scripts/smoke-prod.sh
+# optional: ./scripts/smoke-prod.sh https://other-host.example.com
+```
+
+**OpenAPI models:** the spec merges Better Auth `User` / `Session` / `Account` with all lunch-domain DTOs (`GroupResponse`, `BalanceResponse`, `LedgerAuditEntry`, `DataListGroup`, …) under **components → schemas** in Scalar (Models). Redeploy after changing `src/lib/openapi-domain-schemas.ts` or `src/lib/schemas.ts` for production `/openapi/json` to update.
+
 Authenticated routes need a Better Auth session cookie from `/auth/api/...` (see Scalar **Auth** section).
 
 ## Local Setup

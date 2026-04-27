@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { auth } from "~/auth";
+import { auth } from "~/lib/auth";
 import { toErrorResponse } from "~/lib/errors";
 
 export const authGuard = new Elysia({ name: "auth-guard" }).macro({

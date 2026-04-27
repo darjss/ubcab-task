@@ -92,6 +92,29 @@ export const memberQueries = {
 		return updated ?? null;
 	},
 
+	/** Re-join after removed (or other non-active); clears removed_at and sets joined_at. */
+	restoreActive: async (
+		groupId: string,
+		userId: string,
+		role: "admin" | "member",
+		client: QueryClient = db,
+	) => {
+		const [updated] = await client
+			.update(groupMembers)
+			.set({
+				role,
+				status: "active",
+				removedAt: null,
+				joinedAt: new Date(),
+			})
+			.where(
+				and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)),
+			)
+			.returning();
+
+		return updated ?? null;
+	},
+
 	markRemoved: async (
 		groupId: string,
 		userId: string,
